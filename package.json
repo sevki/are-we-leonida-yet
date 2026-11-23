@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "pnpm build && wrangler deploy",
+    "deploy": "V=$(node scripts/version.mjs) && APP_VERSION=$V vite build && wrangler deploy --var APP_VERSION:$V",
     "typecheck": "tsc && tsc -p web",
     "build": "vite build",
     "dev:web": "vite"

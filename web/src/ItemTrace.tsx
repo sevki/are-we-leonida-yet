@@ -1,4 +1,4 @@
-import { GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestIcon, IssueClosedIcon, IssueOpenedIcon, LinkExternalIcon, type Icon } from "@primer/octicons-react"
+import { GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestIcon, IssueClosedIcon, IssueOpenedIcon, IssueReopenedIcon, LinkExternalIcon, type Icon } from "@primer/octicons-react"
 import type { ItemEvent } from "../../src/activity"
 import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace"
 import { Badge } from "@/components/ui/badge"
@@ -9,11 +9,13 @@ const PR_KIND: Record<Kind, { Icon: Icon; color: string; label: string }> = {
   opened: { Icon: GitPullRequestIcon, color: "text-green-500", label: "opened" },
   merged: { Icon: GitMergeIcon, color: "text-purple-500", label: "merged" },
   closed: { Icon: GitPullRequestClosedIcon, color: "text-red-500", label: "closed" },
+  reopened: { Icon: GitPullRequestIcon, color: "text-amber-500", label: "reopened" },
 }
 const ISSUE_KIND: Record<Kind, { Icon: Icon; color: string; label: string }> = {
   opened: { Icon: IssueOpenedIcon, color: "text-green-500", label: "opened" },
   merged: { Icon: IssueClosedIcon, color: "text-purple-500", label: "closed" }, // issues are not merged; kept for the type
   closed: { Icon: IssueClosedIcon, color: "text-purple-500", label: "closed" },
+  reopened: { Icon: IssueReopenedIcon, color: "text-amber-500", label: "reopened" },
 }
 
 /** Opened / merged / closed pull requests or issues, newest first, in the same style as the claims feed. */

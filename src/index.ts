@@ -8,6 +8,7 @@ declare global {
     ASSETS: Fetcher;
     REPO: string;
     GITHUB_TOKEN?: string;
+    APP_VERSION?: string; // set by `pnpm run deploy`: what is deployed, from `git describe`
     WEBHOOK_SECRET?: string; // optional: set it and add a webhook on the repo to get updates as they happen
   }
 }
@@ -42,6 +43,8 @@ export default {
   fetch(req, env) {
     const { pathname } = new URL(req.url);
     if (pathname === "/webhook") return webhook(req, env);
+    // answered by the worker itself, not the Durable Object, so it always reflects the code that is actually deployed
+    if (pathname === "/api/version") return Response.json({ version: env.APP_VERSION ?? "dev" }, { headers: { "cache-control": "no-store" } });
     if (pathname === "/ws" || pathname.startsWith("/api/") || pathname.startsWith("/badge/")) return hub(env).fetch(req);
     return env.ASSETS.fetch(req);
   },

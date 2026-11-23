@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { fetchSnapshot, GitHubError, type Activity, type Snapshot } from "./github";
 import type { ResolvedClaim } from "./dupes";
+import type { ItemEvent } from "./activity";
 import type { Health } from "./health";
 import { badgeSvg, parseStatus, shieldsJson, type ProjectStatus } from "./status";
 
@@ -20,6 +21,7 @@ export class StatusHub extends DurableObject<Env> {
       ts INTEGER PRIMARY KEY, pr_open INTEGER, pr_merged INTEGER, pr_closed INTEGER,
       issue_open INTEGER, issue_closed INTEGER)`);
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, ts INTEGER, kind TEXT)");
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS reopens (number INTEGER, at TEXT, is_pr INTEGER, title TEXT, user TEXT, url TEXT, PRIMARY KEY (number, at))");
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS claim_refs (id INTEGER PRIMARY KEY, ok INTEGER, user TEXT, ids TEXT, text TEXT, url TEXT)");
   }
 
@@ -64,7 +66,8 @@ export class StatusHub extends DurableObject<Env> {
     const started = Date.now();
     let next = started + POLL_MS;
     try {
-      const { snap, stamps, resolved } = await fetchSnapshot(this.env.REPO, this.env.GITHUB_TOKEN, this.knownClaims());
+      const { snap, stamps, resolved, reopened } = await fetchSnapshot(this.env.REPO, this.env.GITHUB_TOKEN, this.knownClaims(), this.keptReopens());
+      this.keepReopens(reopened);
       for (const c of resolved) this.ctx.storage.sql.exec("INSERT OR REPLACE INTO claim_refs VALUES (?,?,?,?,?,?)", c.id, c.ok ? 1 : 0, c.user, JSON.stringify(c.ids), c.text, c.url);
       next = Math.max(next, Date.now() + 1_000); // a poll that overran its window schedules the next one just after it
       snap.ts = started;
@@ -184,6 +187,22 @@ export class StatusHub extends DurableObject<Env> {
       console.error("status fetch failed", e);
     }
     return cur;
+  }
+
+  /** Reopen events live only in a short feed, so keep them for the stream, a day's worth. */
+  private keepReopens(r: { pr: ItemEvent[]; issue: ItemEvent[] }): void {
+    for (const [isPr, list] of [[1, r.pr], [0, r.issue]] as const) {
+      for (const e of list) this.ctx.storage.sql.exec("INSERT OR IGNORE INTO reopens VALUES (?,?,?,?,?,?)", e.number, e.at, isPr, e.title, e.user, e.url);
+    }
+    this.ctx.storage.sql.exec("DELETE FROM reopens WHERE at < ?", new Date(Date.now() - 24 * 3600_000).toISOString());
+  }
+
+  private keptReopens(): { pr: ItemEvent[]; issue: ItemEvent[] } {
+    const out = { pr: [] as ItemEvent[], issue: [] as ItemEvent[] };
+    for (const r of this.ctx.storage.sql.exec("SELECT number, at, is_pr, title, user, url FROM reopens ORDER BY at DESC LIMIT 200").toArray()) {
+      (r.is_pr === 1 ? out.pr : out.issue).push({ kind: "reopened", number: Number(r.number), at: String(r.at), title: String(r.title), user: String(r.user), url: String(r.url) });
+    }
+    return out;
   }
 
   /** Claim comments already looked up (they do not change, so they are asked for once). */

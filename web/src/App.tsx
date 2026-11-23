@@ -7,6 +7,7 @@ import { Dashboard, useDashboard } from "./Dashboard"
 import { PANELS } from "./panels"
 import { ago, useLive, useNow } from "./useLive"
 import { RepoContext, repoUrl } from "./repo"
+import { useVersion } from "./useVersion"
 
 const REFRESH_MS = 60_000 // fallback when a snapshot predates `nextAt`
 const STALE_MS = 3 * REFRESH_MS // no new snapshot for this long, with no failure reported
@@ -47,6 +48,7 @@ export default function App() {
   // instead of letting a flat panel look like stale data.
   const lastClaim = snap?.claims?.[0]?.created_at
   const quietMin = lastClaim && now + skew - Date.parse(lastClaim) > QUIET_MS ? Math.round((now + skew - Date.parse(lastClaim)) / 60_000) : null
+  const version = useVersion()
   const failing = health && !health.ok ? health : null
   const sinceUpdate = snap ? now + skew - snap.ts : 0
   const stale = !failing && snap && sinceUpdate > STALE_MS ? Math.round(sinceUpdate / 60_000) : null
@@ -90,6 +92,15 @@ export default function App() {
             {connected ? "live" : "reconnecting…"} ·
             <a className="underline underline-offset-2" href={repoUrl(repo)}>{repo}</a>
             {snap && <>· updated {ago(snap.ts, now)}</>}
+            {version.outdated && (
+              <button
+                onClick={() => location.reload()}
+                className="inline-flex h-5 items-center gap-1 rounded-4xl bg-primary px-2 text-xs font-medium text-primary-foreground hover:opacity-90"
+                title={`This page is ${version.current}; ${version.latest} is deployed. Reloading loads the new version.`}
+              >
+                <SyncIcon size={12} aria-hidden="true" /> App updated, click to refresh
+              </button>
+            )}
             {failing && (
               <Badge variant="destructive" className="max-w-[32rem]" title={`${failing.message ?? "The last update failed"}. ${failing.failures} failed in a row. Next attempt ${failing.retryAt ? new Date(failing.retryAt - skew).toLocaleTimeString() : "soon"}. The numbers shown are from the last good update.`}>
                 <span className="truncate">updates failing: {failing.message ?? "unknown error"}</span>
@@ -172,7 +183,7 @@ export default function App() {
             <b className="font-medium text-foreground">Logo credit:</b>{" "}
             <a className="underline underline-offset-2" href="https://www.steamgriddb.com/icon/122618">"Grand Theft Auto VI" icon by SlyDevil</a> on SteamGridDB,
             as used by the <a className="underline underline-offset-2" href={repoUrl(repo)}>Leonida</a> project.
-            This site is unofficial and not affiliated with Rockstar Games or Take-Two.
+            This site is unofficial and not affiliated with Rockstar Games or Take-Two. Version <code className="rounded bg-muted px-1 py-0.5 text-xs">{version.current}</code>.
           </span>
         </p>
         <p className="flex items-center gap-2">

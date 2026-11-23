@@ -10,7 +10,7 @@ import { aiStats, parseClaim, type AiStats, type ClaimEvent } from "./parse";
 import { itemPrefixes, parseBoard, type Board } from "./board";
 import { claimRefs, findDuplicates, type Duplicates, type ResolvedClaim } from "./dupes";
 import { checkClaims, type ClaimIssues } from "./claimcheck";
-import { itemEvents, type ItemEvent, type RawItem } from "./activity";
+import { itemEvents, reopenedEvents, type ItemEvent, type RawIssueEvent, type RawItem } from "./activity";
 import type { ProjectStatus } from "./status";
 
 export interface Snapshot {
@@ -147,9 +147,10 @@ export async function fetchSnapshot(
   configured: string,
   token?: string,
   known: ReadonlyMap<number, ResolvedClaim> = new Map(),
-): Promise<{ snap: Snapshot; stamps: CommentStamp[]; resolved: ResolvedClaim[] }> {
+  kept: { pr: ItemEvent[]; issue: ItemEvent[] } = { pr: [], issue: [] }, // reopen events stored on earlier polls
+): Promise<{ snap: Snapshot; stamps: CommentStamp[]; resolved: ResolvedClaim[]; reopened: { pr: ItemEvent[]; issue: ItemEvent[] } }> {
   const repo = await canonicalName(configured, token);
-  const [prOpen, prOpen2, prOpen3, prMerged, prClosed, issueOpen, issueClosed, sample1, sample2, aiTotal, claimData, prEnded, issueNew, issueEnded] = await Promise.all([
+  const [prOpen, prOpen2, prOpen3, prMerged, prClosed, issueOpen, issueClosed, sample1, sample2, aiTotal, claimData, prEnded, issueNew, issueEnded, reopened] = await Promise.all([
     search(repo, "is:pr is:open", token, 100),
     search(repo, "is:pr is:open", token, 100, 2),
     search(repo, "is:pr is:open", token, 100, 3),
@@ -164,6 +165,9 @@ export async function fetchSnapshot(
     search(repo, "is:pr is:closed", token, 100, 1, "updated"), // recently closed or merged
     search(repo, "is:issue", token, 50), // newest issues
     search(repo, "is:issue is:closed", token, 50, 1, "updated"), // recently closed issues
+    // reopen events exist only in the events feed. It is supplementary, so a failure there must not lose the poll.
+    Promise.all([1, 2].map((p) => gh<RawIssueEvent[]>(`/repos/${repo}/issues/events?per_page=100&page=${p}`, token))).then((r) => reopenedEvents(r.flat()))
+      .catch((e) => { console.error("issue events failed", String(e).slice(0, 200)); return { pr: [] as ItemEvent[], issue: [] as ItemEvent[] }; }),
   ]);
   const openPrs = [...prOpen.items, ...prOpen2.items, ...prOpen3.items].map((i) => ({ number: i.number, title: i.title, user: i.user?.login ?? "ghost", body: i.body, created_at: i.created_at, url: i.html_url }));
   const prefixes = claimData.prefixes;
@@ -187,11 +191,11 @@ export async function fetchSnapshot(
     ai: { ...aiStats([...sample1.items, ...sample2.items].map((i) => i.body)), totalMarked: aiTotal.total_count },
     coordination: claimData.coordination,
     claims: claimData.claims,
-    prEvents: itemEvents([sample1.items, sample2.items, prEnded.items]),
-    issueEvents: itemEvents([issueNew.items, issueEnded.items]),
+    prEvents: itemEvents([sample1.items, sample2.items, prEnded.items], 40, [...kept.pr, ...reopened.pr]),
+    issueEvents: itemEvents([issueNew.items, issueEnded.items], 40, [...kept.issue, ...reopened.issue]),
     duplicates: findDuplicates(openPrs, prefixes, claimMap),
     claimIssues: claimData.claimIssues,
     board: claimData.board,
   };
-  return { snap, stamps: claimData.stamps, resolved };
+  return { snap, stamps: claimData.stamps, resolved, reopened };
 }
