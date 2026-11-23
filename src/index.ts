@@ -1,10 +1,10 @@
-import { Hub } from "./hub";
+import { StatusHub } from "./hub";
 import { RELEVANT_EVENTS, validSignature } from "./webhook";
-export { Hub };
+export { StatusHub };
 
 declare global {
   interface Env {
-    HUB: DurableObjectNamespace<Hub>;
+    HUB: DurableObjectNamespace<StatusHub>;
     ASSETS: Fetcher;
     REPO: string;
     GITHUB_TOKEN?: string;

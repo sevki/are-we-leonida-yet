@@ -8,9 +8,12 @@ const STATUS_MS = 5 * 60_000;
 const SETTLE_MS = 3_000; // after a webhook, wait for GitHub's search index to catch up
 const MIN_GAP_MS = 10_000; // never poll more often than this, however many webhooks arrive
 
-export class Hub extends DurableObject<Env> {
+export class StatusHub extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    // The platform answers the pages' 30 s keep-alive pings itself, without waking this object. If every ping woke
+    // it, a site with many viewers would keep one instance in memory for good and a deploy would never replace it.
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
     ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS snapshots (
       ts INTEGER PRIMARY KEY, pr_open INTEGER, pr_merged INTEGER, pr_closed INTEGER,
       issue_open INTEGER, issue_closed INTEGER)`);
