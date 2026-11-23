@@ -3,6 +3,7 @@ import { fetchSnapshot, GitHubError, type Activity, type Snapshot } from "./gith
 import type { ResolvedClaim } from "./dupes";
 import type { ItemEvent } from "./activity";
 import type { Health } from "./health";
+import { thin } from "./history";
 import { badgeSvg, parseStatus, shieldsJson, type ProjectStatus } from "./status";
 
 const POLL_MS = 60_000;
@@ -232,11 +233,12 @@ export class StatusHub extends DurableObject<Env> {
   }
 
   private history(rangeMs: number) {
-    return this.ctx.storage.sql
+    const rows = this.ctx.storage.sql
       .exec(
         "SELECT ts, pr_open AS prOpen, pr_merged AS prMerged, pr_closed AS prClosed, issue_open AS issueOpen, issue_closed AS issueClosed FROM snapshots WHERE ts > ? ORDER BY ts",
         Date.now() - rangeMs,
       )
-      .toArray();
+      .toArray() as unknown as { ts: number }[];
+    return thin(rows, 800);
   }
 }

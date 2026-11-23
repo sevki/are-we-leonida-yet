@@ -18,7 +18,7 @@ const time = (t: number) => new Date(t).toLocaleTimeString([], { hour: "2-digit"
 
 /** One series with its own auto-fitted axis, so a line that moves by a few (merged PRs)
  *  is not flattened by one that moves by hundreds (open PRs). Fills its panel. */
-export function SeriesPanel({ points, s }: { points: HistoryPoint[]; s: (typeof SERIES)[number] }) {
+export function SeriesPanel({ points, s, rangeName }: { points: HistoryPoint[]; s: (typeof SERIES)[number]; rangeName: string }) {
   const config = { [s.key]: { label: s.label, color: s.color } } satisfies ChartConfig
   const { lo, hi, last, delta, move } = useMemo(() => {
     const v = points.map((p) => p[s.key])
@@ -36,7 +36,7 @@ export function SeriesPanel({ points, s }: { points: HistoryPoint[]; s: (typeof 
         <i className="size-2.5 shrink-0 rounded-sm" style={{ background: s.color }} />
         <b className="text-lg font-semibold tabular-nums">{last.toLocaleString()}</b>
         <span className={`text-xs tabular-nums ${delta > 0 ? "text-green-500" : delta < 0 ? "text-red-500" : "text-muted-foreground"}`}>
-          {delta > 0 ? "+" : ""}{delta.toLocaleString()} in window
+          {delta > 0 ? "+" : ""}{delta.toLocaleString()} in {rangeName === "hour" ? "the hour" : `${rangeName}`}
         </span>
         {move && (
           <span className="truncate text-xs text-amber-500 tabular-nums" title={`The steepest move in this window: ${move.change > 0 ? "+" : ""}${move.change.toLocaleString()} within 10 minutes, ending ${new Date(move.ts).toLocaleString()}`}>

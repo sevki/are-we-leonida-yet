@@ -17,6 +17,7 @@ export interface Ctx {
   flash: Partial<Record<StatKey, Flash>>
   fresh: ReadonlySet<string>
   now: number
+  range: { ms: number; name: string } // the time range chosen in the header
 }
 
 export interface PanelDef {
@@ -34,8 +35,9 @@ const fmt = (n: number) => n.toLocaleString()
 const signed = (n: number | null) => (n == null ? "–" : (n > 0 ? "+" : "") + n.toFixed(1))
 const empty = (what: string) => <p className="text-sm text-muted-foreground">{what} isn't available yet.</p>
 
+/** Change per hour over the chosen range (or over the recorded data, if that is shorter). */
 const rate = (c: Ctx, key: keyof HistoryPoint) => {
-  const p = c.history.find((h) => h.ts >= c.snap.ts - 3600e3)
+  const p = c.history.find((h) => h.ts >= c.snap.ts - c.range.ms)
   const dt = p ? (c.snap.ts - p.ts) / 3600e3 : 0
   return p && dt > 0.01 ? (c.snap[key] - p[key]) / dt : null
 }
@@ -65,7 +67,7 @@ export const PANELS: PanelDef[] = [
     ),
   },
   { id: "status", title: "Are we Leonida yet?", w: 3, h: 14, at: { x: 0, y: 3 }, minW: 2, minH: 5, render: (c) => (c.snap.status ? <StatusCard status={c.snap.status} /> : empty("The README status")) },
-  ...SERIES.map((s, i): PanelDef => ({ id: `trend-${s.key}`, title: s.label, w: 3, h: 7, at: { x: 3 + (i % 3) * 3, y: 3 + Math.floor(i / 3) * 7 }, minW: 2, minH: 4, render: (c) => <SeriesPanel points={[...c.history, c.snap]} s={s} /> })),
+  ...SERIES.map((s, i): PanelDef => ({ id: `trend-${s.key}`, title: s.label, w: 3, h: 7, at: { x: 3 + (i % 3) * 3, y: 3 + Math.floor(i / 3) * 7 }, minW: 2, minH: 4, render: (c) => <SeriesPanel points={[...c.history, c.snap]} s={s} rangeName={c.range.name} /> })),
   {
     id: "ai-tools", title: "AI-assisted PRs: tools", w: 4, h: 9, at: { x: 0, y: 25 }, minW: 2, minH: 3,
     render: (c) => (

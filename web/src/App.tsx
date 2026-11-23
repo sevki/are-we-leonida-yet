@@ -8,6 +8,7 @@ import { PANELS } from "./panels"
 import { ago, useLive, useNow } from "./useLive"
 import { RepoContext, repoUrl } from "./repo"
 import { useVersion } from "./useVersion"
+import { RANGES, useRange } from "./useRange"
 
 const REFRESH_MS = 60_000 // fallback when a snapshot predates `nextAt`
 const STALE_MS = 3 * REFRESH_MS // no new snapshot for this long, with no failure reported
@@ -42,13 +43,15 @@ function RefreshBar({ ts, nextAt, skew, now, connected }: { ts: number; nextAt?:
 }
 
 export default function App() {
-  const { snap, history, connected, flash, fresh, since, skew, viewers, health } = useLive()
+  const { snap, history: liveHistory, connected, flash, fresh, since, skew, viewers, health } = useLive()
   const now = useNow()
   // Claims normally arrive every few seconds. A long silence is real (the thread may be restricted), so say so
   // instead of letting a flat panel look like stale data.
   const lastClaim = snap?.claims?.[0]?.created_at
   const quietMin = lastClaim && now + skew - Date.parse(lastClaim) > QUIET_MS ? Math.round((now + skew - Date.parse(lastClaim)) / 60_000) : null
   const version = useVersion()
+  const { range, setRange, history, spanMs } = useRange(liveHistory, snap)
+  const partial = snap !== undefined && spanMs < range.ms * 0.9 // the dashboard has not been recording that long
   const failing = health && !health.ok ? health : null
   const sinceUpdate = snap ? now + skew - snap.ts : 0
   const stale = !failing && snap && sinceUpdate > STALE_MS ? Math.round(sinceUpdate / 60_000) : null
@@ -130,6 +133,18 @@ export default function App() {
               <EyeIcon size={12} aria-hidden="true" /> {viewers.toLocaleString()}
             </Badge>
           )}
+          <div className="flex items-center gap-1" role="group" aria-label="Time range">
+            {partial && (
+              <span className="hidden text-xs text-muted-foreground sm:inline" title="The recorded points in this range cover this much time. Recording began then, or was interrupted (a deploy, or GitHub unreachable), so the charts show everything recorded.">
+                {spanMs >= 3600_000 ? `${(spanMs / 3600_000).toFixed(1)} h` : `${Math.round(spanMs / 60_000)} min`} of data
+              </span>
+            )}
+            {RANGES.map((r) => (
+              <Button key={r.id} size="xs" variant={r.id === range.id ? "default" : "outline"} aria-pressed={r.id === range.id} onClick={() => setRange(r)}>
+                {r.label}
+              </Button>
+            ))}
+          </div>
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant={edit ? "default" : "outline"} size="sm" />}>
               Layout <ChevronDownIcon size={16} />
@@ -167,7 +182,7 @@ export default function App() {
         </div>
       )}
 
-      {snap ? <Dashboard ctx={{ snap, history, flash, fresh, now }} edit={edit} dash={dash} /> : <p className="text-muted-foreground">waiting for the first snapshot…</p>}
+      {snap ? <Dashboard ctx={{ snap, history, flash, fresh, now, range }} edit={edit} dash={dash} /> : <p className="text-muted-foreground">waiting for the first snapshot…</p>}
 
       <footer className="space-y-2 border-t pt-4 text-sm text-muted-foreground">
         <div className="flex items-start gap-2">
