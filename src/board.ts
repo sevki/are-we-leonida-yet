@@ -16,6 +16,19 @@ export interface Board {
   grabIds: string[]; // the item IDs listed as up for grabs
 }
 
+/** Item-ID prefixes the board actually uses (SHADER, D3D, BUILD...), read from it rather than listed here. Text such
+ *  as "UTF-8" or "SHA-256" has the same shape as an item ID and must not count as one. */
+export function itemPrefixes(board: Board | null): Set<string> {
+  const ids = board ? [...board.areas.flatMap((a) => a.items.map((i) => i.id)), ...board.grabIds, ...board.stale.items.map((i) => i.id)] : [];
+  return new Set(ids.map((id) => id.slice(0, id.lastIndexOf("-"))));
+}
+
+/** IDs in `text` whose prefix the board uses. With no board to learn prefixes from, every ID-shaped token counts. */
+export function itemIdsIn(text: string, prefixes: ReadonlySet<string>): string[] {
+  const all = text.match(ITEM_ID) ?? [];
+  return [...new Set(prefixes.size ? all.filter((id) => prefixes.has(id.slice(0, id.lastIndexOf("-")))) : all)];
+}
+
 export const ITEM_ID = /\b[A-Z][A-Z0-9]*-\d+\b/g;
 
 /** Text of a `### Title` section (up to the next `### `), or "". */

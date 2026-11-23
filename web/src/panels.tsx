@@ -8,7 +8,7 @@ import { ClaimTrace } from "./ClaimTrace"
 import { HBarChart } from "./HBarChart"
 import { StatusCard } from "./StatusCard"
 import { ago, STAT_KEYS, type Flash, type HistoryPoint, type StatKey } from "./useLive"
-import { Areas, Chains, ClaimHealth, ClaimProblems, Claimers } from "./WorkBoard"
+import { Areas, Chains, ClaimHealth, ClaimProblems, Claimers, CompetingPrs } from "./WorkBoard"
 
 export interface Ctx {
   snap: Snapshot
@@ -85,16 +85,20 @@ export const PANELS: PanelDef[] = [
     render: (c) => (c.snap.claimIssues ? <ClaimProblems issues={c.snap.claimIssues} now={c.now} /> : empty("Claim problems")),
   },
   {
+    id: "competing-prs", title: "Competing PRs", w: 12, h: 7, at: { x: 0, y: 49 }, minW: 3, minH: 4,
+    render: (c) => (c.snap.duplicates ? <CompetingPrs dupes={c.snap.duplicates} now={c.now} /> : empty("Competing PRs")),
+  },
+  {
     id: "activity", title: "Comments on the coordination issue", w: 12, h: 8, at: { x: 0, y: 17 }, minW: 3, minH: 4,
     render: (c) => (c.snap.activity ? <div className="h-full"><ActivityChart activity={c.snap.activity} /></div> : empty("Comment activity")),
   },
-  { id: "chains", title: "Merge chains", w: 12, h: 10, at: { x: 0, y: 49 }, minW: 3, minH: 4, render: (c) => (c.snap.board?.chains.length ? <Chains chains={c.snap.board.chains} /> : empty("Merge chains")) },
+  { id: "chains", title: "Merge chains", w: 12, h: 10, at: { x: 0, y: 56 }, minW: 3, minH: 4, render: (c) => (c.snap.board?.chains.length ? <Chains chains={c.snap.board.chains} /> : empty("Merge chains")) },
   {
-    id: "claims", title: "Latest claim activity", w: 6, h: 16, at: { x: 0, y: 59 }, minW: 3, minH: 4,
+    id: "claims", title: "Latest claim activity", w: 6, h: 16, at: { x: 0, y: 66 }, minW: 3, minH: 4,
     render: (c) => <ClaimTrace items={c.snap.claims ?? []} idOf={(e) => `ev:${e.url}`} fresh={c.fresh} now={c.now} limit={25} empty="none found" />,
   },
   {
-    id: "recent", title: "Newest open PRs", w: 6, h: 16, at: { x: 6, y: 59 }, minW: 3, minH: 4,
+    id: "recent", title: "Newest open PRs", w: 6, h: 16, at: { x: 6, y: 66 }, minW: 3, minH: 4,
     render: (c) => (
       <ul className="space-y-1 text-sm">
         {c.snap.recent.map((p) => (

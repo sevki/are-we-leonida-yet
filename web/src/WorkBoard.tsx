@@ -1,6 +1,7 @@
 import { useState } from "react"
 import type { Board } from "../../src/board"
 import type { ClaimIssues } from "../../src/claimcheck"
+import type { Duplicates } from "../../src/dupes"
 import { ago } from "./useLive"
 import { Badge } from "@/components/ui/badge"
 import { HBarChart } from "./HBarChart"
@@ -113,6 +114,38 @@ export function ClaimProblems({ issues, now }: { issues: ClaimIssues; now: numbe
           ))}
         </section>
       </div>
+    </div>
+  )
+}
+
+/** Open PRs that name the same item: the same work written more than once, or one piece of work split across PRs. */
+export function CompetingPrs({ dupes, now }: { dupes: Duplicates; now: number }) {
+  const [all, setAll] = useState(false)
+  const shown = all ? dupes.groups : dupes.groups.slice(0, 6)
+  const competing = dupes.groups.filter((g) => g.competing).length
+  return (
+    <div className="space-y-3 text-sm">
+      <p className="text-muted-foreground">
+        Among the newest {dupes.window.prs} open PRs, <b className="text-foreground">{competing}</b> items have PRs from more than one author and {dupes.groups.length - competing} have several PRs from one author.
+        Only {dupes.window.named} of those PRs name an item in their title or body (most link their claim comment instead), so this under-counts.
+      </p>
+      {dupes.groups.length === 0 && <p className="text-muted-foreground">No two of them name the same item.</p>}
+      {shown.map((g) => (
+        <div key={g.id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Badge variant={g.competing ? "destructive" : "secondary"}>{g.id}</Badge>
+          <span className="text-xs text-muted-foreground">{g.competing ? `${new Set(g.prs.map((p) => p.user)).size} authors` : "one author"}, {g.prs.length} PRs</span>
+          {g.prs.map((p) => (
+            <a key={p.number} className="rounded-md bg-muted/50 px-1.5 py-0.5 text-xs hover:underline" href={p.url} title={`${p.title} (${ago(p.created_at, now)})`}>
+              #{p.number} <span className="text-muted-foreground">{p.user}</span>
+            </a>
+          ))}
+        </div>
+      ))}
+      {dupes.groups.length > 6 && (
+        <button className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground" onClick={() => setAll(!all)}>
+          {all ? "show fewer" : `show all ${dupes.groups.length}`}
+        </button>
+      )}
     </div>
   )
 }
