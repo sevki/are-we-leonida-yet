@@ -8,7 +8,7 @@ import { ClaimTrace } from "./ClaimTrace"
 import { HBarChart } from "./HBarChart"
 import { StatusCard } from "./StatusCard"
 import { ago, STAT_KEYS, type Flash, type HistoryPoint, type StatKey } from "./useLive"
-import { Areas, Chains, ClaimHealth, Claimers } from "./WorkBoard"
+import { Areas, Chains, ClaimHealth, ClaimProblems, Claimers } from "./WorkBoard"
 
 export interface Ctx {
   snap: Snapshot
@@ -81,16 +81,20 @@ export const PANELS: PanelDef[] = [
   { id: "claimers", title: "Most claims held", w: 4, h: 9, at: { x: 8, y: 25 }, minW: 2, minH: 4, render: (c) => (c.snap.board ? <Claimers board={c.snap.board} /> : empty("The board")) },
   { id: "claim-health", title: "Stale claims and review queue", w: 12, h: 5, at: { x: 0, y: 34 }, minW: 3, minH: 3, render: (c) => (c.snap.board ? <ClaimHealth board={c.snap.board} /> : empty("The board")) },
   {
+    id: "claim-problems", title: "Claim problems", w: 12, h: 10, at: { x: 0, y: 39 }, minW: 3, minH: 4,
+    render: (c) => (c.snap.claimIssues ? <ClaimProblems issues={c.snap.claimIssues} now={c.now} /> : empty("Claim problems")),
+  },
+  {
     id: "activity", title: "Comments on the coordination issue", w: 12, h: 8, at: { x: 0, y: 17 }, minW: 3, minH: 4,
     render: (c) => (c.snap.activity ? <div className="h-full"><ActivityChart activity={c.snap.activity} /></div> : empty("Comment activity")),
   },
-  { id: "chains", title: "Merge chains", w: 12, h: 10, at: { x: 0, y: 39 }, minW: 3, minH: 4, render: (c) => (c.snap.board?.chains.length ? <Chains chains={c.snap.board.chains} /> : empty("Merge chains")) },
+  { id: "chains", title: "Merge chains", w: 12, h: 10, at: { x: 0, y: 49 }, minW: 3, minH: 4, render: (c) => (c.snap.board?.chains.length ? <Chains chains={c.snap.board.chains} /> : empty("Merge chains")) },
   {
-    id: "claims", title: "Latest claim activity", w: 6, h: 16, at: { x: 0, y: 49 }, minW: 3, minH: 4,
+    id: "claims", title: "Latest claim activity", w: 6, h: 16, at: { x: 0, y: 59 }, minW: 3, minH: 4,
     render: (c) => <ClaimTrace items={c.snap.claims ?? []} idOf={(e) => `ev:${e.url}`} fresh={c.fresh} now={c.now} limit={25} empty="none found" />,
   },
   {
-    id: "recent", title: "Newest open PRs", w: 6, h: 16, at: { x: 6, y: 49 }, minW: 3, minH: 4,
+    id: "recent", title: "Newest open PRs", w: 6, h: 16, at: { x: 6, y: 59 }, minW: 3, minH: 4,
     render: (c) => (
       <ul className="space-y-1 text-sm">
         {c.snap.recent.map((p) => (

@@ -13,6 +13,7 @@ export interface Board {
   chains: number[][]; // merge order, left to right: each PR depends on the ones before it
   review: ReviewRow[];
   upForGrabs: number;
+  grabIds: string[]; // the item IDs listed as up for grabs
 }
 
 export const ITEM_ID = /\b[A-Z][A-Z0-9]*-\d+\b/g;
@@ -56,7 +57,7 @@ export function parseBoard(raw: string | null): Board | null {
     (m) => ({ label: m[1], unchecked: +m[2], checked: +m[3] }),
   );
 
-  const grabs = section(body, "Up for grabs").split("\n").filter((l) => /^\| [A-Z][A-Z0-9]*-\d+ \|/.test(l)).length;
+  const grabIds = section(body, "Up for grabs").split("\n").flatMap((l) => /^\| ([A-Z][A-Z0-9]*-\d+) \|/.exec(l)?.[1] ?? []);
 
   return {
     updated: /_Updated (.+?) by the coordinator/.exec(body)?.[1] ?? null,
@@ -66,6 +67,7 @@ export function parseBoard(raw: string | null): Board | null {
     stale,
     chains,
     review,
-    upForGrabs: grabs,
+    upForGrabs: grabIds.length,
+    grabIds,
   };
 }

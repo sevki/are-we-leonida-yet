@@ -8,6 +8,7 @@ export interface RecentPR {
 
 import { aiStats, parseClaim, type AiStats, type ClaimEvent } from "./parse";
 import { parseBoard, type Board } from "./board";
+import { checkClaims, type ClaimIssues } from "./claimcheck";
 import type { ProjectStatus } from "./status";
 
 export interface Snapshot {
@@ -22,6 +23,7 @@ export interface Snapshot {
   ai: AiStats & { totalMarked: number }; // sample = newest PRs; totalMarked = all PRs with an AI-assisted note
   coordination: { issue: number; url: string; comments: number } | null;
   claims: ClaimEvent[]; // newest claim/status/blocked/done/... events
+  claimIssues?: ClaimIssues; // double claims, claims without an ID, items listed free but claimed
   board: Board | null; // parsed from the coordination issue's generated body
   status?: ProjectStatus; // the README's "Project status" table (added by the Hub)
   activity?: Activity; // comment volume on the coordination issue (added by the Hub, which keeps the history)
@@ -63,16 +65,18 @@ interface RawComment { id: number; user: { login: string } | null; body: string;
 async function fetchClaims(repo: string, token?: string) {
   const found = await search(repo, 'is:issue is:open "Coordinating who works on what" in:title', token, 5);
   const issue = found.items.find((i) => !/moved to/i.test(i.title)) ?? found.items[0];
-  if (!issue) return { coordination: null, claims: [] as ClaimEvent[], board: null, stamps: [] as CommentStamp[] };
+  if (!issue) return { coordination: null, claims: [] as ClaimEvent[], board: null, claimIssues: undefined, stamps: [] as CommentStamp[] };
   const lastPage = Math.max(1, Math.ceil(issue.comments / 100));
   const pages = [lastPage, lastPage - 1].filter((p) => p >= 1);
   const comments = (await Promise.all(pages.map((p) => gh<RawComment[]>(`/repos/${repo}/issues/${issue.number}/comments?per_page=100&page=${p}`, token)))).flat();
   const parsed = comments.map((c) => ({ c, e: parseClaim(c) }));
   const events = parsed.map((x) => x.e).filter((e): e is ClaimEvent => e !== null).sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const board = parseBoard(issue.body); // the search result already carries the issue body
   return {
     coordination: { issue: issue.number, url: issue.html_url, comments: issue.comments },
+    claimIssues: checkClaims(events, comments.length, board?.grabIds ?? []),
     claims: events.slice(-60).reverse(),
-    board: parseBoard(issue.body), // the search result already carries the issue body
+    board,
     stamps: parsed.map(({ c, e }) => ({ id: c.id, ts: Date.parse(c.created_at), kind: e?.kind ?? "other" })),
   };
 }
@@ -106,6 +110,7 @@ export async function fetchSnapshot(repo: string, token?: string): Promise<{ sna
     ai: { ...aiStats([...sample1.items, ...sample2.items].map((i) => i.body)), totalMarked: aiTotal.total_count },
     coordination: claimData.coordination,
     claims: claimData.claims,
+    claimIssues: claimData.claimIssues,
     board: claimData.board,
   };
   return { snap, stamps: claimData.stamps };
