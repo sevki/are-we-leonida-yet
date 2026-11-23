@@ -14,20 +14,32 @@ project is from booting.
 - Open, merged and closed PRs and issues, with trend charts that each scale to their own range.
 - The coordination issue ("Coordinating who works on what"): claims by area, top claimers, stale claims, the
   review queue, merge chains, and a live feed of `claiming:` / `status:` / `done:` / `blocked:` / `releasing:` comments.
+- **Claim problems**: from the newest coordination-issue comments, items held by more than one person, items the
+  board lists as up for grabs that are already claimed, and claims with no item ID. Derived and read-only: the
+  comments and the board stay the source of truth, and it only shows where they disagree.
+- **Competing PRs**: open PRs that are about the same work, found from item IDs in their text and from the claim
+  comment they link (looked up once and cached). Several authors on one item is "competing"; one author is a split.
+  It only sees the newest 300 open PRs, and says how many of them it could place.
+- Live **pull request** and **issue** activity feeds (opened, merged, closed) in the style of the claims feed.
+- A watcher count (open connections, so each tab counts) next to the Layout menu.
 - AI-assisted PRs, with tools (Claude Code, Codex, Cursor, …) and models (Claude, GPT, GLM, Kimi, Qwen, …) counted
   separately, read from the `AI-assisted (Tool / Model)` note in PR bodies.
 - An "Are we Leonida yet?" badge built from the Project status table in the Leonida README.
 - A refresh bar that counts down to the server's real next poll.
+- Honest staleness: a red "updates failing" badge with GitHub's reason (and the rate-limit reset time is honoured),
+  an amber "no update" badge when nothing arrives, and "claims quiet for N min" when no claim comment has been posted.
 
 The dashboard is a drag-and-resize grid. Use **Layout → Edit** to rearrange or hide panels, and **Export** /
 **Import** to move a layout between browsers. Layouts are stored in the browser only.
 
 ## How it works
 
-- `src/hub.ts`: one Durable Object. A 60 s alarm polls GitHub and broadcasts a snapshot to every connected
+- `src/hub.ts`: one Durable Object (`StatusHub`). A 60 s alarm polls GitHub and broadcasts a snapshot to every connected
   WebSocket. History is kept in the object's SQLite storage. A once-a-minute cron is only a watchdog.
 - `src/github.ts`, `src/parse.ts`, `src/board.ts`, `src/status.ts`: GitHub queries and the parsers for claims,
   the coordination board, AI-assisted notes and the README status table.
+- `src/claimcheck.ts`, `src/dupes.ts`, `src/activity.ts`, `src/health.ts`: the claim-problem and competing-PR
+  analysis, the opened/merged/closed events, and the poll-health record.
 - `src/webhook.ts`, `src/index.ts`: optional `POST /webhook` receiver (see below).
 - `web/`: React 19, Vite, Tailwind 4, shadcn (Base UI), Recharts, react-grid-layout and Octicons. It builds into
   `public/`, which the worker serves as static assets.
@@ -61,6 +73,16 @@ pnpm run deploy        # not `pnpm deploy`, which is a different built-in comman
 
 The route in `wrangler.jsonc` attaches a custom domain, so change it to one you own. Set `REPO` there to track a
 different repository, though the coordination-issue parsing is specific to Leonida's conventions.
+
+## Operating notes
+
+- **GitHub search limit:** each poll makes 14 search calls against GitHub's limit of 30 a minute per token. Testing
+  with the same token as the worker can make a poll fail for a minute; it recovers on its own.
+- **Renames:** GitHub's search API does not follow a repository rename (it answers 422), so each poll first asks
+  REST for the repo's current name and the page builds its links from it.
+- **Deploys and the Durable Object:** a deploy does not replace a Durable Object that stays awake. Keep-alive pings
+  are answered by `setWebSocketAutoResponse` so they don't wake it. If a deploy still doesn't take effect, a
+  `renamed_classes` migration restarts the object and keeps its data.
 
 ## Webhooks (optional)
 
