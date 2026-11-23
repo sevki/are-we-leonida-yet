@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { fetchSnapshot, type Activity, type Snapshot } from "./github";
+import type { ResolvedClaim } from "./dupes";
 import { badgeSvg, parseStatus, shieldsJson, type ProjectStatus } from "./status";
 
 const POLL_MS = 60_000;
@@ -18,6 +19,7 @@ export class StatusHub extends DurableObject<Env> {
       ts INTEGER PRIMARY KEY, pr_open INTEGER, pr_merged INTEGER, pr_closed INTEGER,
       issue_open INTEGER, issue_closed INTEGER)`);
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, ts INTEGER, kind TEXT)");
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS claim_refs (id INTEGER PRIMARY KEY, ok INTEGER, user TEXT, ids TEXT, text TEXT, url TEXT)");
   }
 
   async fetch(req: Request): Promise<Response> {
@@ -60,7 +62,8 @@ export class StatusHub extends DurableObject<Env> {
     const started = Date.now();
     let next = started + POLL_MS;
     try {
-      const { snap, stamps } = await fetchSnapshot(this.env.REPO, this.env.GITHUB_TOKEN);
+      const { snap, stamps, resolved } = await fetchSnapshot(this.env.REPO, this.env.GITHUB_TOKEN, this.knownClaims());
+      for (const c of resolved) this.ctx.storage.sql.exec("INSERT OR REPLACE INTO claim_refs VALUES (?,?,?,?,?,?)", c.id, c.ok ? 1 : 0, c.user, JSON.stringify(c.ids), c.text, c.url);
       next = Math.max(next, Date.now() + 1_000); // a poll that overran its window schedules the next one just after it
       snap.ts = started;
       snap.nextAt = next;
@@ -153,6 +156,12 @@ export class StatusHub extends DurableObject<Env> {
       console.error("status fetch failed", e);
     }
     return cur;
+  }
+
+  /** Claim comments already looked up (they do not change, so they are asked for once). */
+  private knownClaims(): Map<number, ResolvedClaim> {
+    const rows = this.ctx.storage.sql.exec("SELECT id, ok, user, ids, text, url FROM claim_refs").toArray();
+    return new Map(rows.map((r): [number, ResolvedClaim] => [Number(r.id), { id: Number(r.id), ok: r.ok === 1, user: String(r.user), ids: JSON.parse(String(r.ids)), text: String(r.text), url: String(r.url) }]));
   }
 
   private async latest(): Promise<Snapshot | undefined> {

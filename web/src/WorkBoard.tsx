@@ -126,13 +126,14 @@ export function CompetingPrs({ dupes, now }: { dupes: Duplicates; now: number })
   return (
     <div className="space-y-3 text-sm">
       <p className="text-muted-foreground">
-        Among the newest {dupes.window.prs} open PRs, <b className="text-foreground">{competing}</b> items have PRs from more than one author and {dupes.groups.length - competing} have several PRs from one author.
-        Only {dupes.window.named} of those PRs name an item in their title or body (most link their claim comment instead), so this under-counts.
+        Among the newest {dupes.window.prs} open PRs, <b className="text-foreground">{competing}</b> pieces of work have PRs from more than one author and {dupes.groups.length - competing} have several PRs from one author.
+        {" "}{dupes.window.named} of the {dupes.window.prs} PRs could be placed, by an item ID in the text or by the claim comment they link ({dupes.window.linked} link one).
+        {dupes.window.unresolved > 0 && ` ${dupes.window.unresolved} links are still being looked up.`}
       </p>
       {dupes.groups.length === 0 && <p className="text-muted-foreground">No two of them name the same item.</p>}
       {shown.map((g) => (
-        <div key={g.id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Badge variant={g.competing ? "destructive" : "secondary"}>{g.id}</Badge>
+        <div key={g.key} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Badge variant={g.competing ? "destructive" : "secondary"} className="max-w-[28rem]" title={g.label}><span className="truncate">{g.label}</span></Badge>
           <span className="text-xs text-muted-foreground">{g.competing ? `${new Set(g.prs.map((p) => p.user)).size} authors` : "one author"}, {g.prs.length} PRs</span>
           {g.prs.map((p) => (
             <a key={p.number} className="rounded-md bg-muted/50 px-1.5 py-0.5 text-xs hover:underline" href={p.url} title={`${p.title} (${ago(p.created_at, now)})`}>

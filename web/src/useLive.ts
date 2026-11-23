@@ -11,6 +11,8 @@ const HIGHLIGHT_MS = 8000
 const itemIds = (s: Snapshot) => [
   ...s.recent.map((p) => `pr:${p.number}`),
   ...(s.claims ?? []).map((c) => `ev:${c.url}`),
+  ...(s.prEvents ?? []).map((e) => `pe:${e.kind}:${e.number}`),
+  ...(s.issueEvents ?? []).map((e) => `ie:${e.kind}:${e.number}`),
 ]
 const totalPrs = (s: Snapshot) => s.prOpen + s.prMerged + s.prClosed
 

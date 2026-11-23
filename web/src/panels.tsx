@@ -8,6 +8,7 @@ import { ClaimTrace } from "./ClaimTrace"
 import { HBarChart } from "./HBarChart"
 import { StatusCard } from "./StatusCard"
 import { ago, STAT_KEYS, type Flash, type HistoryPoint, type StatKey } from "./useLive"
+import { ItemTrace } from "./ItemTrace"
 import { Areas, Chains, ClaimHealth, ClaimProblems, Claimers, CompetingPrs } from "./WorkBoard"
 
 export interface Ctx {
@@ -94,21 +95,16 @@ export const PANELS: PanelDef[] = [
   },
   { id: "chains", title: "Merge chains", w: 12, h: 10, at: { x: 0, y: 56 }, minW: 3, minH: 4, render: (c) => (c.snap.board?.chains.length ? <Chains chains={c.snap.board.chains} /> : empty("Merge chains")) },
   {
-    id: "claims", title: "Latest claim activity", w: 6, h: 16, at: { x: 0, y: 66 }, minW: 3, minH: 4,
+    id: "claims", title: "Latest claim activity", w: 4, h: 16, at: { x: 0, y: 66 }, minW: 3, minH: 4,
     render: (c) => <ClaimTrace items={c.snap.claims ?? []} idOf={(e) => `ev:${e.url}`} fresh={c.fresh} now={c.now} limit={25} empty="none found" />,
   },
   {
-    id: "recent", title: "Newest open PRs", w: 6, h: 16, at: { x: 6, y: 66 }, minW: 3, minH: 4,
-    render: (c) => (
-      <ul className="space-y-1 text-sm">
-        {c.snap.recent.map((p) => (
-          <li key={p.number} className={`rounded-md px-2 py-1 ${c.fresh.has(`pr:${p.number}`) ? "new-row" : ""}`}>
-            <a className="hover:underline" href={p.url}>#{p.number} {p.title}</a>{" "}
-            <small className="text-muted-foreground">by {p.user} · {ago(p.created_at, c.now)}</small>
-          </li>
-        ))}
-      </ul>
-    ),
+    id: "pr-activity", title: "Pull request activity", w: 4, h: 16, at: { x: 4, y: 66 }, minW: 3, minH: 4,
+    render: (c) => <ItemTrace items={c.snap.prEvents ?? []} pr fresh={c.fresh} now={c.now} limit={30} empty="none found" />,
+  },
+  {
+    id: "issue-activity", title: "Issue activity", w: 4, h: 16, at: { x: 8, y: 66 }, minW: 3, minH: 4,
+    render: (c) => <ItemTrace items={c.snap.issueEvents ?? []} pr={false} fresh={c.fresh} now={c.now} limit={30} empty="none found" />,
   },
 ]
 

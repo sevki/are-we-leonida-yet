@@ -8,8 +8,9 @@ export interface RecentPR {
 
 import { aiStats, parseClaim, type AiStats, type ClaimEvent } from "./parse";
 import { itemPrefixes, parseBoard, type Board } from "./board";
-import { findDuplicates, type Duplicates } from "./dupes";
+import { claimRefs, findDuplicates, type Duplicates, type ResolvedClaim } from "./dupes";
 import { checkClaims, type ClaimIssues } from "./claimcheck";
+import { itemEvents, type ItemEvent, type RawItem } from "./activity";
 import type { ProjectStatus } from "./status";
 
 export interface Snapshot {
@@ -25,6 +26,8 @@ export interface Snapshot {
   ai: AiStats & { totalMarked: number }; // sample = newest PRs; totalMarked = all PRs with an AI-assisted note
   coordination: { issue: number; url: string; comments: number } | null;
   claims: ClaimEvent[]; // newest claim/status/blocked/done/... events
+  prEvents?: ItemEvent[]; // newest opened / merged / closed pull requests
+  issueEvents?: ItemEvent[]; // newest opened / closed issues
   duplicates?: Duplicates; // open PRs that name the same item
   claimIssues?: ClaimIssues; // double claims, claims without an ID, items listed free but claimed
   board: Board | null; // parsed from the coordination issue's generated body
@@ -42,7 +45,7 @@ export interface CommentStamp { id: number; ts: number; kind: string }
 
 interface SearchResult {
   total_count: number;
-  items: { number: number; title: string; body: string | null; comments: number; user: { login: string } | null; created_at: string; html_url: string }[];
+  items: (RawItem & { body: string | null; comments: number })[];
 }
 
 async function gh<T>(path: string, token?: string): Promise<T> {
@@ -58,8 +61,8 @@ async function gh<T>(path: string, token?: string): Promise<T> {
   return res.json();
 }
 
-function search(repo: string, q: string, token: string | undefined, perPage = 1, page = 1): Promise<SearchResult> {
-  return gh(`/search/issues?q=${encodeURIComponent(`repo:${repo} ${q}`)}&sort=created&order=desc&per_page=${perPage}&page=${page}`, token);
+function search(repo: string, q: string, token: string | undefined, perPage = 1, page = 1, sort: "created" | "updated" = "created"): Promise<SearchResult> {
+  return gh(`/search/issues?q=${encodeURIComponent(`repo:${repo} ${q}`)}&sort=${sort}&order=desc&per_page=${perPage}&page=${page}`, token);
 }
 
 interface RawComment { id: number; user: { login: string } | null; body: string; created_at: string; html_url: string }
@@ -101,9 +104,35 @@ async function canonicalName(repo: string, token?: string): Promise<string> {
   }
 }
 
-export async function fetchSnapshot(configured: string, token?: string): Promise<{ snap: Snapshot; stamps: CommentStamp[] }> {
+const RESOLVE_PER_POLL = 40; // new claim comments looked up per poll, so the first fill spreads over a few polls
+
+/** Look up claim comments the PRs link to and that are not cached yet. Only a missing comment is remembered as
+ *  missing; a rate limit or network error is retried on the next poll. */
+async function resolveClaims(repo: string, token: string | undefined, wanted: number[], known: ReadonlyMap<number, ResolvedClaim>, known2: (id: string) => boolean): Promise<ResolvedClaim[]> {
+  const todo = wanted.filter((id) => !known.has(id)).slice(0, RESOLVE_PER_POLL);
+  const out: ResolvedClaim[] = [];
+  for (let i = 0; i < todo.length; i += 10) {
+    await Promise.all(todo.slice(i, i + 10).map(async (id) => {
+      try {
+        const c = await gh<RawComment>(`/repos/${repo}/issues/comments/${id}`, token);
+        const e = parseClaim(c);
+        out.push({ id, ok: true, user: c.user?.login ?? "ghost", ids: (e?.itemIds ?? []).filter(known2), text: e?.text ?? "", url: c.html_url });
+      } catch (err) {
+        if (String(err).includes("GitHub 404")) out.push({ id, ok: false, user: "", ids: [], text: "", url: "" });
+        else console.error("claim lookup failed", id, err);
+      }
+    }));
+  }
+  return out;
+}
+
+export async function fetchSnapshot(
+  configured: string,
+  token?: string,
+  known: ReadonlyMap<number, ResolvedClaim> = new Map(),
+): Promise<{ snap: Snapshot; stamps: CommentStamp[]; resolved: ResolvedClaim[] }> {
   const repo = await canonicalName(configured, token);
-  const [prOpen, prOpen2, prOpen3, prMerged, prClosed, issueOpen, issueClosed, sample1, sample2, aiTotal, claimData] = await Promise.all([
+  const [prOpen, prOpen2, prOpen3, prMerged, prClosed, issueOpen, issueClosed, sample1, sample2, aiTotal, claimData, prEnded, issueNew, issueEnded] = await Promise.all([
     search(repo, "is:pr is:open", token, 100),
     search(repo, "is:pr is:open", token, 100, 2),
     search(repo, "is:pr is:open", token, 100, 3),
@@ -115,7 +144,14 @@ export async function fetchSnapshot(configured: string, token?: string): Promise
     search(repo, "is:pr", token, 100, 2),
     search(repo, 'is:pr "AI-assisted" in:body', token),
     fetchClaims(repo, token),
+    search(repo, "is:pr is:closed", token, 100, 1, "updated"), // recently closed or merged
+    search(repo, "is:issue", token, 50), // newest issues
+    search(repo, "is:issue is:closed", token, 50, 1, "updated"), // recently closed issues
   ]);
+  const openPrs = [...prOpen.items, ...prOpen2.items, ...prOpen3.items].map((i) => ({ number: i.number, title: i.title, user: i.user?.login ?? "ghost", body: i.body, created_at: i.created_at, url: i.html_url }));
+  const prefixes = claimData.prefixes;
+  const resolved = await resolveClaims(repo, token, [...new Set(openPrs.flatMap((p) => claimRefs(p.body)))], known, (id) => !prefixes.size || prefixes.has(id.slice(0, id.lastIndexOf("-"))));
+  const claimMap = new Map([...known, ...resolved.map((c): [number, ResolvedClaim] => [c.id, c])]);
   const snap: Snapshot = {
     repo,
     ts: Date.now(),
@@ -134,12 +170,11 @@ export async function fetchSnapshot(configured: string, token?: string): Promise
     ai: { ...aiStats([...sample1.items, ...sample2.items].map((i) => i.body)), totalMarked: aiTotal.total_count },
     coordination: claimData.coordination,
     claims: claimData.claims,
-    duplicates: findDuplicates(
-      [...prOpen.items, ...prOpen2.items, ...prOpen3.items].map((i) => ({ number: i.number, title: i.title, user: i.user?.login ?? "ghost", body: i.body, created_at: i.created_at, url: i.html_url })),
-      claimData.prefixes,
-    ),
+    prEvents: itemEvents([sample1.items, sample2.items, prEnded.items]),
+    issueEvents: itemEvents([issueNew.items, issueEnded.items]),
+    duplicates: findDuplicates(openPrs, prefixes, claimMap),
     claimIssues: claimData.claimIssues,
     board: claimData.board,
   };
-  return { snap, stamps: claimData.stamps };
+  return { snap, stamps: claimData.stamps, resolved };
 }

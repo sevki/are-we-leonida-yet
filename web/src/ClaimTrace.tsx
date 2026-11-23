@@ -89,7 +89,7 @@ export function ClaimTrace({
             </TraceCollapsibleTrigger>
             <TraceCollapsibleContent>
               <TraceTitle>{e.text}</TraceTitle>
-              <TraceDescription>
+              <TraceDescription className="pl-2 whitespace-nowrap">
                 {ago(e.created_at, now)}{" "}
                 <a
                   href={e.url}
