@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "leonida-status",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/ws", "/api/*", "/badge/*", "/webhook"] },
+  "durable_objects": { "bindings": [{ "name": "HUB", "class_name": "Hub" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Hub"] }],
+  "routes": [{ "pattern": "are-we-leonida-yet.sevki.app", "custom_domain": true }],
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": { "REPO": "ItsNotRexed/Leonida" }
+}
