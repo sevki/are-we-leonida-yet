@@ -1,6 +1,6 @@
 # Are We Leonida Yet?
 
-A live status dashboard for [ItsNotRexed/Leonida](https://github.com/ItsNotRexed/Leonida), live at
+A live status dashboard for [ProjectLeonida/Leonida](https://github.com/ProjectLeonida/Leonida), live at
 **https://are-we-leonida-yet.sevki.app**.
 
 > **Observing, not contributing.** This project doesn't aim to contribute to the development of Leonida.
@@ -73,7 +73,7 @@ requests**, **Issues** and **Issue comments** events.
 
 GitHub only delivers webhooks for a repository to someone who can configure them there: **admin access to the
 repo** (or an organisation-level webhook). Read access and a token aren't enough. The live site tracks
-ItsNotRexed/Leonida, which this project doesn't own, so it has **no webhook and runs on the 60 s poll alone**. The
+ProjectLeonida/Leonida, which this project doesn't own, so it has **no webhook and runs on the 60 s poll alone**. The
 receiver is deployed but inert until the repo's owner adds the webhook above. If you run this against a repo you
 administer, you get push-style updates.
 

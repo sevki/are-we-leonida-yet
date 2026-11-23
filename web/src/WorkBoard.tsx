@@ -6,7 +6,7 @@ import { ago } from "./useLive"
 import { Badge } from "@/components/ui/badge"
 import { HBarChart } from "./HBarChart"
 
-const PR = (n: number) => `https://github.com/ItsNotRexed/Leonida/pull/${n}`
+import { repoUrl, useRepo } from "./repo"
 
 export function Areas({ board }: { board: Board }) {
   const areas = board.areas.filter((a) => a.items.length).map((a) => ({ name: a.area, count: a.items.length }))
@@ -38,6 +38,7 @@ export function ClaimHealth({ board }: { board: Board }) {
 
 /** Merge chains: each PR comes after the ones it depends on. The first PR in a chain is the one that can land next. */
 export function Chains({ chains }: { chains: number[][] }) {
+  const repo = useRepo()
   const [all, setAll] = useState(false)
   const sorted = [...chains].sort((a, b) => b.length - a.length)
   const shown = all ? sorted : sorted.slice(0, 12)
@@ -53,7 +54,7 @@ export function Chains({ chains }: { chains: number[][] }) {
           {c.map((n, i) => (
             <span key={n} className="inline-flex items-center gap-1.5">
               {i > 0 && <span className="text-muted-foreground">→</span>}
-              <a href={PR(n)}><Badge variant={i === 0 ? "default" : "outline"}>#{n}</Badge></a>
+              <a href={repoUrl(repo, `/pull/${n}`)}><Badge variant={i === 0 ? "default" : "outline"}>#{n}</Badge></a>
             </span>
           ))}
         </div>
@@ -67,7 +68,6 @@ export function Chains({ chains }: { chains: number[][] }) {
   )
 }
 
-const ISSUE = "https://github.com/ItsNotRexed/Leonida/issues"
 
 /** What the coordination thread alone can show is going wrong: two people on one item, claims nothing can track,
  *  and items the board still offers although someone has claimed them. Derived from the newest comments only. */

@@ -6,6 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dashboard, useDashboard } from "./Dashboard"
 import { PANELS } from "./panels"
 import { ago, useLive, useNow } from "./useLive"
+import { RepoContext, repoUrl } from "./repo"
 
 const REFRESH_MS = 60_000 // fallback when a snapshot predates `nextAt`
 const LATE_MS = 15_000 // this long past the promised time with no update counts as late
@@ -40,6 +41,7 @@ function RefreshBar({ ts, nextAt, skew, now, connected }: { ts: number; nextAt?:
 export default function App() {
   const { snap, history, connected, flash, fresh, since, skew, viewers } = useLive()
   const now = useNow()
+  const repo = snap?.repo ?? "ProjectLeonida/Leonida" // until the first snapshot arrives
   const dash = useDashboard()
   const [edit, setEdit] = useState(() => new URLSearchParams(location.search).has("edit"))
   const fileInput = useRef<HTMLInputElement>(null)
@@ -68,6 +70,7 @@ export default function App() {
   }
 
   return (
+    <RepoContext.Provider value={repo}>
     <main className="w-full space-y-3 p-4">
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <img src="/logo.png" alt="Leonida logo" width={44} height={44} className="size-11 shrink-0" />
@@ -76,7 +79,7 @@ export default function App() {
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className={`size-2 rounded-full ${connected ? "bg-green-500" : "bg-destructive"}`} />
             {connected ? "live" : "reconnecting…"} ·
-            <a className="underline underline-offset-2" href="https://github.com/ItsNotRexed/Leonida">ItsNotRexed/Leonida</a>
+            <a className="underline underline-offset-2" href={repoUrl(repo)}>{repo}</a>
             {snap && <>· updated {ago(snap.ts, now)}</>}
           </p>
         </div>
@@ -144,7 +147,7 @@ export default function App() {
           <span>
             <b className="font-medium text-foreground">Logo credit:</b>{" "}
             <a className="underline underline-offset-2" href="https://www.steamgriddb.com/icon/122618">"Grand Theft Auto VI" icon by SlyDevil</a> on SteamGridDB,
-            as used by the <a className="underline underline-offset-2" href="https://github.com/ItsNotRexed/Leonida">Leonida</a> project.
+            as used by the <a className="underline underline-offset-2" href={repoUrl(repo)}>Leonida</a> project.
             This site is unofficial and not affiliated with Rockstar Games or Take-Two.
           </span>
         </p>
@@ -157,5 +160,6 @@ export default function App() {
         </p>
       </footer>
     </main>
+    </RepoContext.Provider>
   )
 }

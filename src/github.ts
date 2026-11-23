@@ -13,6 +13,7 @@ import { checkClaims, type ClaimIssues } from "./claimcheck";
 import type { ProjectStatus } from "./status";
 
 export interface Snapshot {
+  repo: string; // the repository's current full name (it can be renamed or transferred)
   ts: number; // when this poll started (server clock)
   nextAt?: number; // when the next poll is scheduled to start (server clock); the UI counts down to it
   prOpen: number;
@@ -89,7 +90,19 @@ async function fetchClaims(repo: string, token?: string) {
   };
 }
 
-export async function fetchSnapshot(repo: string, token?: string): Promise<{ snap: Snapshot; stamps: CommentStamp[] }> {
+/** The name GitHub knows the repository by today. A renamed or transferred repo keeps answering REST calls under its
+ *  old name (a redirect), but search does not follow it and rejects the old name with a 422. */
+async function canonicalName(repo: string, token?: string): Promise<string> {
+  try {
+    return (await gh<{ full_name: string }>(`/repos/${repo}`, token)).full_name || repo;
+  } catch (e) {
+    console.error("repo lookup failed, using the configured name", e);
+    return repo;
+  }
+}
+
+export async function fetchSnapshot(configured: string, token?: string): Promise<{ snap: Snapshot; stamps: CommentStamp[] }> {
+  const repo = await canonicalName(configured, token);
   const [prOpen, prOpen2, prOpen3, prMerged, prClosed, issueOpen, issueClosed, sample1, sample2, aiTotal, claimData] = await Promise.all([
     search(repo, "is:pr is:open", token, 100),
     search(repo, "is:pr is:open", token, 100, 2),
@@ -104,6 +117,7 @@ export async function fetchSnapshot(repo: string, token?: string): Promise<{ sna
     fetchClaims(repo, token),
   ]);
   const snap: Snapshot = {
+    repo,
     ts: Date.now(),
     prOpen: prOpen.total_count,
     prMerged: prMerged.total_count,

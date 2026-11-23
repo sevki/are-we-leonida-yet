@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/trace";
 import { Badge } from "@/components/ui/badge";
 import { ago } from "./useLive";
+import { repoUrl, useRepo } from "./repo";
 
 const KIND: Record<ClaimKind, { Icon: Icon; status?: "running" | "pending"; color?: string }> = {
   // a live claim is work in progress, so its title shimmers
@@ -47,6 +48,7 @@ export function ClaimTrace({
   limit: number;
   empty: string;
 }) {
+  const repo = useRepo();
   if (!items.length)
     return <p className="text-sm text-muted-foreground">{empty}</p>;
   return (
@@ -76,7 +78,7 @@ export function ClaimTrace({
                   {e.refs.map((n) => (
                     <a
                       key={n}
-                      href={`https://github.com/ItsNotRexed/Leonida/issues/${n}`}
+                      href={repoUrl(repo, `/issues/${n}`)}
                       className="underline underline-offset-2 hover:text-foreground"
                     >
                       #{n}
