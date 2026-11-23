@@ -69,6 +69,17 @@ arrive within seconds: set a secret with `pnpm exec wrangler secret put WEBHOOK_
 payload URL `https://<your-domain>/webhook`, content type `application/json`, the same secret, and the **Pull
 requests**, **Issues** and **Issue comments** events.
 
+### The limitation today
+
+GitHub only delivers webhooks for a repository to someone who can configure them there: **admin access to the
+repo** (or an organisation-level webhook). Read access and a token aren't enough. The live site tracks
+ItsNotRexed/Leonida, which this project doesn't own, so it has **no webhook and runs on the 60 s poll alone**. The
+receiver is deployed but inert until the repo's owner adds the webhook above. If you run this against a repo you
+administer, you get push-style updates.
+
+Without admin access the only push-like alternative is GitHub's Events API, which is still polling and can lag
+behind the repo, so it isn't used here.
+
 The signature (`X-Hub-Signature-256`) is verified, and an event never updates counters itself: it only pulls the
 next poll forward (3 s settle, 10 s minimum gap). Without a secret the endpoint rejects everything.
 
