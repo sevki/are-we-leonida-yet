@@ -22,6 +22,7 @@ export function useLive() {
   const [flash, setFlash] = useState<Partial<Record<StatKey, Flash>>>({})
   const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set())
   const [since, setSince] = useState({ prs: 0, merged: 0, claims: 0 })
+  const [viewers, setViewers] = useState<number>()
   const [skew, setSkew] = useState(0) // server clock minus this browser's clock, in ms
   const prev = useRef<Snapshot>(undefined)
   const seq = useRef(0)
@@ -71,6 +72,10 @@ export function useLive() {
         if (e.data === "pong") return
         const m = JSON.parse(e.data)
         if (typeof m.serverNow === "number") setSkew(m.serverNow - Date.now())
+        if (m.type === "viewers") {
+          setViewers(m.count)
+          return
+        }
         if (m.type === "next") {
           // the server pulled the next poll forward (a webhook arrived)
           if (prev.current) prev.current = { ...prev.current, nextAt: m.nextAt }
@@ -81,6 +86,7 @@ export function useLive() {
       }
       ws.onclose = () => {
         setConnected(false)
+        setViewers(undefined)
         if (!closed) retry = window.setTimeout(connect, 3000)
       }
     }
@@ -95,7 +101,7 @@ export function useLive() {
     }
   }, [])
 
-  return { snap, history, connected, flash, fresh, since, skew }
+  return { snap, history, connected, flash, fresh, since, skew, viewers }
 }
 
 export function useNow(ms = 15000) {

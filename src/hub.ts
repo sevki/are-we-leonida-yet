@@ -25,6 +25,7 @@ export class Hub extends DurableObject<Env> {
       this.ctx.acceptWebSocket(pair[1]);
       const latest = await this.latest();
       if (latest) pair[1].send(this.frame(latest, this.history(24 * 3600_000)));
+      this.announceViewers();
       // the alarm is the clock; if it is somehow missing, restart it
       if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + 1_000);
       return new Response(null, { status: 101, webSocket: pair[0] });
@@ -112,7 +113,20 @@ export class Hub extends DurableObject<Env> {
   webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
     if (message === "ping") ws.send("pong");
   }
+  /** Tell everyone how many connections are open. `leaving` is a socket that is closing but may still be listed. */
+  private announceViewers(leaving?: WebSocket): void {
+    const open = this.ctx.getWebSockets().filter((w) => w !== leaving);
+    const msg = JSON.stringify({ type: "viewers", count: open.length, serverNow: Date.now() });
+    for (const w of open) {
+      try { w.send(msg); } catch { /* closed */ }
+    }
+  }
+
+  webSocketError(ws: WebSocket) {
+    this.announceViewers(ws);
+  }
   webSocketClose(ws: WebSocket, code: number) {
+    this.announceViewers(ws);
     // 1005/1006/1015 are reserved: a peer that closed without a status code reports one, and echoing it throws
     const echo = code >= 1000 && code < 5000 && ![1005, 1006, 1015].includes(code) ? code : 1000;
     try { ws.close(echo, "bye"); } catch { /* already closed */ }

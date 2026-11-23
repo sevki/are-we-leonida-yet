@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react"
 import { ChevronDownIcon, DownloadIcon, EyeIcon, MarkGithubIcon, PencilIcon, PlusIcon, SyncIcon, UploadIcon } from "@primer/octicons-react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dashboard, useDashboard } from "./Dashboard"
@@ -37,7 +38,7 @@ function RefreshBar({ ts, nextAt, skew, now, connected }: { ts: number; nextAt?:
 }
 
 export default function App() {
-  const { snap, history, connected, flash, fresh, since, skew } = useLive()
+  const { snap, history, connected, flash, fresh, since, skew, viewers } = useLive()
   const now = useNow()
   const dash = useDashboard()
   const [edit, setEdit] = useState(() => new URLSearchParams(location.search).has("edit"))
@@ -86,6 +87,11 @@ export default function App() {
         )}
         <div className="ml-auto flex items-center gap-2">
           <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" onChange={onImport} />
+          {viewers !== undefined && (
+            <Badge variant="secondary" title={`${viewers} open ${viewers === 1 ? "connection" : "connections"} watching live (each tab counts)`} aria-label={`${viewers} watching`}>
+              <EyeIcon size={12} aria-hidden="true" /> {viewers.toLocaleString()}
+            </Badge>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant={edit ? "default" : "outline"} size="sm" />}>
               Layout <ChevronDownIcon size={16} />
