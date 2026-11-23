@@ -9,6 +9,7 @@ import { ago, useLive, useNow } from "./useLive"
 import { RepoContext, repoUrl } from "./repo"
 
 const REFRESH_MS = 60_000 // fallback when a snapshot predates `nextAt`
+const STALE_MS = 3 * REFRESH_MS // no new snapshot for this long, with no failure reported
 const QUIET_MS = 5 * 60_000 // this long without a claim comment is worth pointing out
 const LATE_MS = 15_000 // this long past the promised time with no update counts as late
 
@@ -40,12 +41,15 @@ function RefreshBar({ ts, nextAt, skew, now, connected }: { ts: number; nextAt?:
 }
 
 export default function App() {
-  const { snap, history, connected, flash, fresh, since, skew, viewers } = useLive()
+  const { snap, history, connected, flash, fresh, since, skew, viewers, health } = useLive()
   const now = useNow()
   // Claims normally arrive every few seconds. A long silence is real (the thread may be restricted), so say so
   // instead of letting a flat panel look like stale data.
   const lastClaim = snap?.claims?.[0]?.created_at
   const quietMin = lastClaim && now + skew - Date.parse(lastClaim) > QUIET_MS ? Math.round((now + skew - Date.parse(lastClaim)) / 60_000) : null
+  const failing = health && !health.ok ? health : null
+  const sinceUpdate = snap ? now + skew - snap.ts : 0
+  const stale = !failing && snap && sinceUpdate > STALE_MS ? Math.round(sinceUpdate / 60_000) : null
   const repo = snap?.repo ?? "ProjectLeonida/Leonida" // until the first snapshot arrives
   const dash = useDashboard()
   const [edit, setEdit] = useState(() => new URLSearchParams(location.search).has("edit"))
@@ -86,6 +90,16 @@ export default function App() {
             {connected ? "live" : "reconnecting…"} ·
             <a className="underline underline-offset-2" href={repoUrl(repo)}>{repo}</a>
             {snap && <>· updated {ago(snap.ts, now)}</>}
+            {failing && (
+              <Badge variant="destructive" className="max-w-[32rem]" title={`${failing.message ?? "The last update failed"}. ${failing.failures} failed in a row. Next attempt ${failing.retryAt ? new Date(failing.retryAt - skew).toLocaleTimeString() : "soon"}. The numbers shown are from the last good update.`}>
+                <span className="truncate">updates failing: {failing.message ?? "unknown error"}</span>
+              </Badge>
+            )}
+            {stale !== null && (
+              <Badge variant="outline" className="border-amber-500/50 text-amber-500" title="No new snapshot has arrived, and the server has not reported an error.">
+                no update for {stale}m
+              </Badge>
+            )}
             {quietMin !== null && (
               <Badge variant="outline" className="border-amber-500/50 text-amber-500" title={`The newest claim, status or done comment on the coordination issue is from ${new Date(lastClaim!).toLocaleTimeString()}. Counts still update; nothing is wrong with the page.`}>
                 claims quiet for {quietMin >= 90 ? `${Math.round(quietMin / 60)}h` : `${quietMin}m`}

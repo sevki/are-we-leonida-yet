@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
-import { fetchSnapshot, type Activity, type Snapshot } from "./github";
+import { fetchSnapshot, GitHubError, type Activity, type Snapshot } from "./github";
 import type { ResolvedClaim } from "./dupes";
+import type { Health } from "./health";
 import { badgeSvg, parseStatus, shieldsJson, type ProjectStatus } from "./status";
 
 const POLL_MS = 60_000;
@@ -29,7 +30,8 @@ export class StatusHub extends DurableObject<Env> {
       const pair = new WebSocketPair();
       this.ctx.acceptWebSocket(pair[1]);
       const latest = await this.latest();
-      if (latest) pair[1].send(this.frame(latest, this.history(24 * 3600_000)));
+      if (latest) pair[1].send(await this.frameWithHealth(latest, this.history(24 * 3600_000)));
+      else { const hh = await this.health(); if (hh) pair[1].send(JSON.stringify({ type: "health", health: hh, serverNow: Date.now() })); }
       this.announceViewers();
       // the alarm is the clock; if it is somehow missing, restart it
       if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + 1_000);
@@ -45,7 +47,7 @@ export class StatusHub extends DurableObject<Env> {
     }
     if (url.pathname === "/api/stats") {
       const range = Math.min(Number(url.searchParams.get("range") ?? 24 * 3600_000), KEEP_MS);
-      return Response.json({ snapshot: await this.latest(), history: this.history(range), serverNow: Date.now() });
+      return Response.json({ snapshot: await this.latest(), history: this.history(range), health: (await this.health()) ?? null, serverNow: Date.now() });
     }
     return new Response("not found", { status: 404 });
   }
@@ -77,13 +79,35 @@ export class StatusHub extends DurableObject<Env> {
       );
       this.ctx.storage.sql.exec("DELETE FROM snapshots WHERE ts < ?", Date.now() - KEEP_MS);
       await this.ctx.storage.put("latest", snap);
-      const msg = this.frame(snap);
+      await this.record({ ok: true, at: Date.now(), lastOk: started, failures: 0 }); // before the frame, so it carries the new state
+      const msg = await this.frameWithHealth(snap);
       for (const ws of this.ctx.getWebSockets()) {
         try { ws.send(msg); } catch { /* closed */ }
       }
+    } catch (e) {
+      // a rate limit says when it lifts, so wait for that instead of failing again a minute from now
+      if (e instanceof GitHubError && e.resetAt) next = Math.max(next, e.resetAt + 1_000);
+      const prev = await this.health();
+      const message = e instanceof Error ? e.message : String(e);
+      console.error("poll failed", message);
+      await this.record({ ok: false, at: Date.now(), lastOk: prev?.lastOk ?? (await this.latest())?.ts, message: message.slice(0, 300), retryAt: next, failures: (prev?.failures ?? 0) + 1 });
     } finally {
       // even a failed poll keeps the clock ticking
       await this.ctx.storage.setAlarm(next);
+    }
+  }
+
+  private async health(): Promise<Health | undefined> {
+    return this.ctx.storage.get<Health>("health");
+  }
+
+  /** Store the outcome and tell the pages. A success rides along with the snapshot frame, so only a failure is sent alone. */
+  private async record(h: Health): Promise<void> {
+    await this.ctx.storage.put("health", h);
+    if (h.ok) return;
+    const msg = JSON.stringify({ type: "health", health: h, serverNow: Date.now() });
+    for (const ws of this.ctx.getWebSockets()) {
+      try { ws.send(msg); } catch { /* closed */ }
     }
   }
 
@@ -112,8 +136,12 @@ export class StatusHub extends DurableObject<Env> {
   }
 
   /** Every frame carries the server's clock, so the browser can correct for its own clock being off. */
-  private frame(snapshot: Snapshot, history?: unknown): string {
-    return JSON.stringify({ type: "snapshot", snapshot, history, serverNow: Date.now() });
+  private frame(snapshot: Snapshot, history?: unknown, health?: Health): string {
+    return JSON.stringify({ type: "snapshot", snapshot, history, health, serverNow: Date.now() });
+  }
+
+  private async frameWithHealth(snapshot: Snapshot, history?: unknown): Promise<string> {
+    return this.frame(snapshot, history, await this.health());
   }
 
   webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {

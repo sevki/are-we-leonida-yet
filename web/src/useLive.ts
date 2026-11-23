@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import type { Snapshot } from "../../src/github"
+import type { Health } from "../../src/health"
 
 export type HistoryPoint = Pick<Snapshot, "ts" | "prOpen" | "prMerged" | "prClosed" | "issueOpen" | "issueClosed">
 export const STAT_KEYS = ["prOpen", "prMerged", "prClosed", "issueOpen", "issueClosed"] as const
@@ -25,6 +26,7 @@ export function useLive() {
   const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set())
   const [since, setSince] = useState({ prs: 0, merged: 0, claims: 0 })
   const [viewers, setViewers] = useState<number>()
+  const [health, setHealth] = useState<Health>()
   const [skew, setSkew] = useState(0) // server clock minus this browser's clock, in ms
   const prev = useRef<Snapshot>(undefined)
   const seq = useRef(0)
@@ -74,6 +76,10 @@ export function useLive() {
         if (e.data === "pong") return
         const m = JSON.parse(e.data)
         if (typeof m.serverNow === "number") setSkew(m.serverNow - Date.now())
+        if (m.type === "health") {
+          setHealth(m.health)
+          return
+        }
         if (m.type === "viewers") {
           setViewers(m.count)
           return
@@ -84,6 +90,7 @@ export function useLive() {
           setSnap((s) => (s ? { ...s, nextAt: m.nextAt } : s))
           return
         }
+        if (m.health) setHealth(m.health)
         apply(m.snapshot, m.history)
       }
       ws.onclose = () => {
@@ -103,7 +110,7 @@ export function useLive() {
     }
   }, [])
 
-  return { snap, history, connected, flash, fresh, since, skew, viewers }
+  return { snap, history, connected, flash, fresh, since, skew, viewers, health }
 }
 
 export function useNow(ms = 15000) {

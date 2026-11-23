@@ -48,6 +48,13 @@ interface SearchResult {
   items: (RawItem & { body: string | null; comments: number })[];
 }
 
+/** A failed GitHub call, with what a caller needs to react: the status, and when a rate limit lifts. */
+export class GitHubError extends Error {
+  constructor(public status: number, message: string, public resetAt?: number) {
+    super(message);
+  }
+}
+
 async function gh<T>(path: string, token?: string): Promise<T> {
   const res = await fetch(`https://api.github.com${path}`, {
     headers: {
@@ -57,7 +64,17 @@ async function gh<T>(path: string, token?: string): Promise<T> {
       ...(token ? { authorization: `Bearer ${token}` } : {}),
     },
   });
-  if (!res.ok) throw new Error(`GitHub ${res.status} ${path}: ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) {
+    const text = await res.text();
+    let detail = text.slice(0, 200);
+    try { detail = (JSON.parse(text) as { message?: string }).message ?? detail; } catch { /* not JSON */ }
+    // a rate limit says when it lifts: Retry-After (seconds), or the reset time when none is left
+    const retry = Number(res.headers.get("retry-after"));
+    const reset = Number(res.headers.get("x-ratelimit-reset"));
+    const limited = (res.status === 403 || res.status === 429) && (retry > 0 || res.headers.get("x-ratelimit-remaining") === "0" || /rate limit/i.test(detail));
+    const resetAt = limited ? (retry > 0 ? Date.now() + retry * 1000 : reset > 0 ? reset * 1000 : undefined) : undefined;
+    throw new GitHubError(res.status, `GitHub ${res.status} on ${path.split("?")[0]}: ${detail}`, resetAt);
+  }
   return res.json();
 }
 
@@ -118,7 +135,7 @@ async function resolveClaims(repo: string, token: string | undefined, wanted: nu
         const e = parseClaim(c);
         out.push({ id, ok: true, user: c.user?.login ?? "ghost", ids: (e?.itemIds ?? []).filter(known2), text: e?.text ?? "", url: c.html_url });
       } catch (err) {
-        if (String(err).includes("GitHub 404")) out.push({ id, ok: false, user: "", ids: [], text: "", url: "" });
+        if (err instanceof GitHubError && err.status === 404) out.push({ id, ok: false, user: "", ids: [], text: "", url: "" });
         else console.error("claim lookup failed", id, err);
       }
     }));
